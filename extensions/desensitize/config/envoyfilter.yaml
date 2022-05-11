@@ -40,7 +40,8 @@ spec:
                 '@type': type.googleapis.com/google.protobuf.StringValue
                 value: |
                  {
-                   "desensitizeTypes": ["PhoneNumber","IdCard"]
+                    "globals": ["PhoneNumber","IdCard"],
+                    "fields": ["orderSn"]
                  }
               vm_config:
                 code:
