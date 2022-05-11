@@ -41,7 +41,7 @@ spec:
                 value: |
                  {
                     "globals": ["PhoneNumber","IdCard"],
-                    "fields": ["orderSn"]
+                    "customs": ["data.receiverPostCode==Mask#Pre_2"]
                  }
               vm_config:
                 code:

@@ -1,11 +1,14 @@
 package main
 
 import (
+	"bytes"
 	"fmt"
 	"github.com/tetratelabs/proxy-wasm-go-sdk/proxywasm"
 	"github.com/tetratelabs/proxy-wasm-go-sdk/proxywasm/types"
 	"github.com/tidwall/gjson"
+	"github.com/tidwall/sjson"
 	"regexp"
+	"strconv"
 	"strings"
 )
 
@@ -34,20 +37,20 @@ type pluginContext struct {
 type pluginConfiguration struct {
 	// desensitizeTypes support values includes honeNumber/idCard
 	globals []string
-	fields  []string
+	customs []string
 }
 
 // Override types.DefaultPluginContext.
 func (ctx *pluginContext) NewHttpContext(contextID uint32) types.HttpContext {
 	proxywasm.LogInfof("新的一次请求")
-	return &responseContext{contextID: contextID, globals: ctx.configuration.globals, fields: ctx.configuration.fields}
+	return &responseContext{contextID: contextID, globals: ctx.configuration.globals, customs: ctx.configuration.customs}
 }
 
 type responseContext struct {
 	contextID uint32
 	types.DefaultHttpContext
 	globals []string
-	fields  []string
+	customs []string
 }
 
 // Override types.DefaultPluginContext.
@@ -87,10 +90,10 @@ func parsePluginConfiguration(data []byte) (pluginConfiguration, error) {
 		}
 	}
 
-	fields := jsonData.Get("fields").Array()
-	if len(fields) != 0 {
-		for _, fieldsFields := range fields {
-			config.fields = append(config.fields, fieldsFields.Str)
+	customs := jsonData.Get("customs").Array()
+	if len(customs) != 0 {
+		for _, custom := range customs {
+			config.customs = append(config.customs, custom.Str)
 		}
 	}
 
@@ -104,7 +107,7 @@ func (r *responseContext) OnHttpResponseBody(bodySize int, endOfStream bool) typ
 		return types.ActionPause
 	}
 
-	body, err := proxywasm.GetHttpResponseBody(0, bodySize)
+	bodyByte, err := proxywasm.GetHttpResponseBody(0, bodySize)
 	if err != nil {
 		return 0
 	}
@@ -113,35 +116,82 @@ func (r *responseContext) OnHttpResponseBody(bodySize int, endOfStream bool) typ
 		return types.ActionContinue
 	}
 
-	bodyStr := string(body)
-	proxywasm.LogInfof("original response body: %s", bodyStr)
+	isJsonData := validatePayload(bodyByte)
+	if !isJsonData {
+		return types.ActionPause
+	}
+
+	body := string(bodyByte)
+	proxywasm.LogInfof("original response body: %s", body)
 
 	enablePhoneNumber := false
 	enableIdCard := false
 
-	proxywasm.LogInfof("global: %s, fields: %s .", r.globals, r.fields)
+	//proxywasm.LogInfof("global: %s, customs: %s .", r.globals, r.customs)
 
-	if true {
-		if len(r.globals) != 0 {
-			enablePhoneNumber = isContain(r.globals, "PhoneNumber")
-			enableIdCard = isContain(r.globals, "IdCard")
-		}
+	if len(r.globals) != 0 {
+		enablePhoneNumber = isContain(r.globals, "PhoneNumber")
+		enableIdCard = isContain(r.globals, "IdCard")
+	}
 
-		if enablePhoneNumber {
-			bodyStr = PhoneNumberDesensitize(bodyStr)
-		}
+	if enablePhoneNumber {
+		body = PhoneNumberDesensitize(body)
+	}
 
-		if enableIdCard {
-			bodyStr = IdCardDesensitize(bodyStr)
-		}
-	} else {
-		isJsonData := validatePayload(body)
-		if !isJsonData {
-			return types.ActionPause
+	if enableIdCard {
+		body = IdCardDesensitize(body)
+	}
+
+	if len(r.customs) != 0 {
+		json := gjson.Parse(body)
+		for _, custom := range r.customs {
+			if !validateCustomRule(custom) {
+				continue
+			}
+			customRule := strings.Split(custom, "==")
+			field := customRule[0]
+			desensitizeType := strings.Split(customRule[1], "#")[0]
+			rule := strings.Split(customRule[1], "#")[1]
+
+			//proxywasm.LogInfof("field: %s, desensitizeType: %s , rule: %s.", field, desensitizeType, rule)
+
+			if json.Get(field).Exists() {
+				if desensitizeType == "Mask" {
+					//proxywasm.LogInfof("desensitizeType: %s .", desensitizeType)
+					replaceValue := maskOperator(json.Get(field).String(), rule)
+					//proxywasm.LogInfof("replaceValue: %s .", replaceValue)
+					body, err = sjson.Set(body, field, replaceValue)
+					if err != nil {
+						return 0
+					}
+				}
+			}
 		}
 	}
-	proxywasm.ReplaceHttpResponseBody([]byte(bodyStr))
+
+	proxywasm.ReplaceHttpResponseBody([]byte(body))
 	return types.ActionContinue
+}
+
+func maskOperator(str, rule string) string {
+	rules := strings.Split(rule, "_")
+	index, err := strconv.Atoi(rules[1])
+	if err != nil {
+		return ""
+	}
+	var bt bytes.Buffer
+	if rules[0] == "Pre" {
+		for i := 0; i < index; i++ {
+			bt.WriteString("*")
+		}
+		bt.WriteString(str[index:])
+	}
+	return bt.String()
+}
+
+func validateCustomRule(rule string) bool {
+
+	return true
 }
 
 func isContain(items []string, item string) bool {
