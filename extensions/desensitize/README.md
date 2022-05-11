@@ -45,7 +45,7 @@ istioctl -n mall proxy-config log mall-admin-5498f4fb79-svt7l --level trace
 
 查看日志
 ```shell
- kubectl logs mall-admin-5498f4fb79-svt7l -n mall -c istio-proxy  | grep "wasm log clean-mall-admin"
+ kubectl logs -f mall-admin-5498f4fb79-svt7l -n mall -c istio-proxy  | grep "wasm log clean-mall-admin"
 ```
 
 
