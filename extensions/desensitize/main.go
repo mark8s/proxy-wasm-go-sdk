@@ -33,18 +33,21 @@ type pluginContext struct {
 
 type pluginConfiguration struct {
 	// desensitizeTypes support values includes honeNumber/idCard
-	desensitizeTypes []string
+	globals []string
+	fields  []string
 }
 
 // Override types.DefaultPluginContext.
 func (ctx *pluginContext) NewHttpContext(contextID uint32) types.HttpContext {
-	return &responseContext{contextID: contextID, desensitizeTypes: ctx.configuration.desensitizeTypes}
+	proxywasm.LogInfof("新的一次请求")
+	return &responseContext{contextID: contextID, globals: ctx.configuration.globals, fields: ctx.configuration.fields}
 }
 
 type responseContext struct {
 	contextID uint32
 	types.DefaultHttpContext
-	desensitizeTypes []string
+	globals []string
+	fields  []string
 }
 
 // Override types.DefaultPluginContext.
@@ -67,25 +70,39 @@ func (ctx *pluginContext) OnPluginStart(pluginConfigurationSize int) types.OnPlu
 // Note that this parses the json data by gjson, since TinyGo doesn't support encoding/json.
 // You can also try https://github.com/mailru/easyjson, which supports decoding to a struct.
 func parsePluginConfiguration(data []byte) (pluginConfiguration, error) {
+
 	if len(data) == 0 {
 		return pluginConfiguration{}, nil
 	}
-
 	config := &pluginConfiguration{}
 	if !gjson.ValidBytes(data) {
 		return pluginConfiguration{}, fmt.Errorf("the plugin configuration is not a valid json: %q", string(data))
 	}
 
 	jsonData := gjson.ParseBytes(data)
-	desensitizeTypes := jsonData.Get("desensitizeTypes").Array()
-	for _, desensitizeType := range desensitizeTypes {
-		config.desensitizeTypes = append(config.desensitizeTypes, desensitizeType.Str)
+	globals := jsonData.Get("globals").Array()
+	if len(globals) != 0 {
+		for _, globalFields := range globals {
+			config.globals = append(config.globals, globalFields.Str)
+		}
+	}
+
+	fields := jsonData.Get("fields").Array()
+	if len(fields) != 0 {
+		for _, fieldsFields := range fields {
+			config.fields = append(config.fields, fieldsFields.Str)
+		}
 	}
 
 	return *config, nil
 }
 
 func (r *responseContext) OnHttpResponseBody(bodySize int, endOfStream bool) types.Action {
+	if !endOfStream {
+		// OnHttpRequestBody may be called each time a part of the body is received.
+		// Wait until we see the entire body to replace.
+		return types.ActionPause
+	}
 
 	body, err := proxywasm.GetHttpResponseBody(0, bodySize)
 	if err != nil {
@@ -95,25 +112,34 @@ func (r *responseContext) OnHttpResponseBody(bodySize int, endOfStream bool) typ
 		proxywasm.LogErrorf("failed to get response body: %v", err)
 		return types.ActionContinue
 	}
+
 	bodyStr := string(body)
 	proxywasm.LogInfof("original response body: %s", bodyStr)
 
 	enablePhoneNumber := false
 	enableIdCard := false
 
-	if len(r.desensitizeTypes) != 0 {
-		enablePhoneNumber = isContain(r.desensitizeTypes, "PhoneNumber")
-		enableIdCard = isContain(r.desensitizeTypes, "IdCard")
-	}
+	proxywasm.LogInfof("global: %s, fields: %s .", r.globals, r.fields)
 
-	if enablePhoneNumber {
-		bodyStr = PhoneNumberDesensitize(bodyStr)
-	}
+	if true {
+		if len(r.globals) != 0 {
+			enablePhoneNumber = isContain(r.globals, "PhoneNumber")
+			enableIdCard = isContain(r.globals, "IdCard")
+		}
 
-	if enableIdCard {
-		bodyStr = IdCardDesensitize(bodyStr)
-	}
+		if enablePhoneNumber {
+			bodyStr = PhoneNumberDesensitize(bodyStr)
+		}
 
+		if enableIdCard {
+			bodyStr = IdCardDesensitize(bodyStr)
+		}
+	} else {
+		isJsonData := validatePayload(body)
+		if !isJsonData {
+			return types.ActionPause
+		}
+	}
 	proxywasm.ReplaceHttpResponseBody([]byte(bodyStr))
 	return types.ActionContinue
 }
@@ -125,6 +151,14 @@ func isContain(items []string, item string) bool {
 		}
 	}
 	return false
+}
+
+func validatePayload(body []byte) bool {
+	if !gjson.ValidBytes(body) {
+		proxywasm.LogErrorf("body is not a valid json: %q", string(body))
+		return false
+	}
+	return true
 }
 
 func postCodeDesensitize(body string) string {

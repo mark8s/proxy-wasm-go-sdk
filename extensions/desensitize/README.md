@@ -4,7 +4,7 @@ Desensitize也即数据脱敏。数据脱敏也叫数据的去隐私化，在我
 像政府、医疗行业、金融机构、移动运营商是比较早开始应用数据脱敏的，因为他们所掌握的都是用户最核心的私密数据，如果泄露后果是不可估量的。
 数据脱敏的应用在生活中是比较常见的，比如我们在淘宝买东西订单详情中，商家账户信息会被用 * 遮挡，保障了商户隐私不泄露，这就是一种数据脱敏方式。
 
-`desensitize`是一个数据脱敏的`wasm` extensions，支持支持n种类型数据的脱敏，例如：邮箱地址、手机号、身份证、银行卡、车牌号、姓名、家庭地址、ip地址、生日、密码等。
+`desensitize`是一个数据脱敏的`wasm` extensions，支持n种类型数据的脱敏，例如：邮箱地址、手机号、身份证、银行卡、车牌号、姓名、家庭地址、ip地址、生日、密码等。
 
 目前支持的脱敏类型为Mask，未来会支持如Hiding、Hashing、Shift、Truncation等。
 
@@ -37,7 +37,16 @@ Desensitize也即数据脱敏。数据脱敏也叫数据的去隐私化，在我
 tinygo build -o desensitize.wasm -scheduler=none -target=wasi main.go
 ```
 
+## 调试
+修改 istio-proxy日志级别，调试wasm的时候很有用。
+```shell
+istioctl -n mall proxy-config log mall-admin-5498f4fb79-svt7l --level trace
+```
 
+查看日志
+```shell
+ kubectl logs mall-admin-5498f4fb79-svt7l -n mall -c istio-proxy  | grep "wasm log clean-mall-admin"
+```
 
 
 
