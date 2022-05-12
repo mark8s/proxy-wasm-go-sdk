@@ -122,22 +122,17 @@ func (r *responseContext) OnHttpResponseBody(bodySize int, endOfStream bool) typ
 	}
 
 	body := string(bodyByte)
-	proxywasm.LogInfof("original response body: %s", body)
+	proxywasm.LogInfof("Response Body: %s", body)
 
 	enablePhoneNumber := false
 	enableIdCard := false
-
-	//proxywasm.LogInfof("global: %s, customs: %s .", r.globals, r.customs)
-
 	if len(r.globals) != 0 {
 		enablePhoneNumber = isContain(r.globals, "PhoneNumber")
 		enableIdCard = isContain(r.globals, "IdCard")
 	}
-
 	if enablePhoneNumber {
 		body = PhoneNumberDesensitize(body)
 	}
-
 	if enableIdCard {
 		body = IdCardDesensitize(body)
 	}
@@ -152,14 +147,9 @@ func (r *responseContext) OnHttpResponseBody(bodySize int, endOfStream bool) typ
 			field := customRule[0]
 			desensitizeType := strings.Split(customRule[1], "#")[0]
 			rule := strings.Split(customRule[1], "#")[1]
-
-			//proxywasm.LogInfof("field: %s, desensitizeType: %s , rule: %s.", field, desensitizeType, rule)
-
 			if json.Get(field).Exists() {
 				if desensitizeType == "Mask" {
-					//proxywasm.LogInfof("desensitizeType: %s .", desensitizeType)
 					replaceValue := maskOperator(json.Get(field).String(), rule)
-					//proxywasm.LogInfof("replaceValue: %s .", replaceValue)
 					body, err = sjson.Set(body, field, replaceValue)
 					if err != nil {
 						return 0
@@ -173,24 +163,63 @@ func (r *responseContext) OnHttpResponseBody(bodySize int, endOfStream bool) typ
 	return types.ActionContinue
 }
 
+// Pre、Suf、Con
 func maskOperator(str, rule string) string {
 	rules := strings.Split(rule, "_")
-	index, err := strconv.Atoi(rules[1])
-	if err != nil {
-		return ""
-	}
+
 	var bt bytes.Buffer
 	if rules[0] == "Pre" {
+		index, err := strconv.Atoi(rules[1])
+		if err != nil {
+			proxywasm.LogErrorf("failed to mask data: %v", err)
+			return ""
+		}
 		for i := 0; i < index; i++ {
 			bt.WriteString("*")
 		}
 		bt.WriteString(str[index:])
 	}
+
+	if rules[0] == "Suf" {
+		index, err := strconv.Atoi(rules[1])
+		if err != nil {
+			proxywasm.LogErrorf("failed to mask data: %v", err)
+			return ""
+		}
+		i := len(str) - index
+		bt.WriteString(str[:i])
+		for i := len(str) - index; i < len(str); i++ {
+			bt.WriteString("*")
+		}
+	}
+
+	if rules[0] == "Con" {
+		ruleIndex := strings.Split(rules[1], "-")
+		indexLeft, err := strconv.Atoi(ruleIndex[0])
+		if err != nil {
+			proxywasm.LogErrorf("failed to mask data: %v", err)
+			return ""
+		}
+		indexRight, err := strconv.Atoi(ruleIndex[1])
+		if err != nil {
+			proxywasm.LogErrorf("failed to mask data: %v", err)
+			return ""
+		}
+		bt.WriteString(str[:indexLeft-1])
+		for i := indexLeft; i <= indexRight; i++ {
+			bt.WriteString("*")
+		}
+		bt.WriteString(str[indexRight:])
+	}
+
 	return bt.String()
 }
 
 func validateCustomRule(rule string) bool {
-
+	if !strings.Contains(rule, "==") || !strings.Contains(rule, "#") || !strings.Contains(rule, "_") {
+		proxywasm.LogErrorf("customs rule is not a valid format: %s", rule)
+		return false
+	}
 	return true
 }
 

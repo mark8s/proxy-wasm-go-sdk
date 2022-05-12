@@ -16,11 +16,13 @@ Desensitize也即数据脱敏。数据脱敏也叫数据的去隐私化，在我
 ## 配置脱敏
 ```yaml 
       { 
-           configuration:
+         config:
+              configuration:
                 '@type': type.googleapis.com/google.protobuf.StringValue
                 value: |
                  {
-                   "desensitizeTypes": ["PhoneNumber","IdCard"]
+                    "globals": ["PhoneNumber","IdCard"],
+                    "customs": ["data.receiverPostCode==Mask#Pre_2"]
                  }
               vm_config:
                 code:
@@ -30,6 +32,17 @@ Desensitize也即数据脱敏。数据脱敏也叫数据的去隐私化，在我
                 runtime: envoy.wasm.runtime.v8
                 vm_id: clean-mall-admin
       }
+```
+
+`globals`: 全部字段的脱敏，现在可针对手机号、身份证号去进行脱敏，脱敏的规则是内置的。
+`customs`: 针对指定字段进行脱敏，配置的格式为：fieldPath==脱敏类型#配置规则
+
+目前只支持Mask，Pre代表加密前缀,2为值的前两位。规则还可以输入的值为 Suf和Con，分别代表 后缀和连续。
+
+如针对`data.receiverPostCode`字段值的第2位到第4位进行数据加密，则表达式的写法为：
+
+```shell
+data.receiverPostCode==Mask#Con_2-4
 ```
 
 ## 构建
