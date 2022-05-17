@@ -68,14 +68,6 @@ func isContain(items []string, item string) bool {
 	return false
 }
 
-func validateCustomRule(rule string) bool {
-	if !strings.Contains(rule, "==") || !strings.Contains(rule, "#") || !strings.Contains(rule, "_") {
-		proxywasm.LogErrorf("customs rule is not a valid format: %s", rule)
-		return false
-	}
-	return true
-}
-
 func validatePayload(body []byte) bool {
 	if !gjson.ValidBytes(body) {
 		proxywasm.LogErrorf("body is not a valid json: %q", string(body))
