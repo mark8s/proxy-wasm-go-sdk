@@ -1,14 +1,11 @@
 package main
 
 import (
-	"bytes"
 	"fmt"
 	"github.com/tetratelabs/proxy-wasm-go-sdk/proxywasm"
 	"github.com/tetratelabs/proxy-wasm-go-sdk/proxywasm/types"
 	"github.com/tidwall/gjson"
 	"github.com/tidwall/sjson"
-	"regexp"
-	"strconv"
 	"strings"
 )
 
@@ -42,7 +39,6 @@ type pluginConfiguration struct {
 
 // Override types.DefaultPluginContext.
 func (ctx *pluginContext) NewHttpContext(contextID uint32) types.HttpContext {
-	proxywasm.LogInfof("新的一次请求")
 	return &responseContext{contextID: contextID, globals: ctx.configuration.globals, customs: ctx.configuration.customs}
 }
 
@@ -124,17 +120,13 @@ func (r *responseContext) OnHttpResponseBody(bodySize int, endOfStream bool) typ
 	body := string(bodyByte)
 	proxywasm.LogInfof("Response Body: %s", body)
 
-	enablePhoneNumber := false
-	enableIdCard := false
 	if len(r.globals) != 0 {
-		enablePhoneNumber = isContain(r.globals, "PhoneNumber")
-		enableIdCard = isContain(r.globals, "IdCard")
-	}
-	if enablePhoneNumber {
-		body = PhoneNumberDesensitize(body)
-	}
-	if enableIdCard {
-		body = IdCardDesensitize(body)
+		if isContain(r.globals, "PhoneNumber") {
+			body = PhoneNumberDesensitize(body)
+		}
+		if isContain(r.globals, "IdCard") {
+			body = IdCardDesensitize(body)
+		}
 	}
 
 	if len(r.customs) != 0 {
@@ -143,18 +135,11 @@ func (r *responseContext) OnHttpResponseBody(bodySize int, endOfStream bool) typ
 			if !validateCustomRule(custom) {
 				continue
 			}
-			customRule := strings.Split(custom, "==")
-			field := customRule[0]
-			desensitizeType := strings.Split(customRule[1], "#")[0]
-			rule := strings.Split(customRule[1], "#")[1]
-			if json.Get(field).Exists() {
-				if desensitizeType == "Mask" {
-					replaceValue := maskOperator(json.Get(field).String(), rule)
-					body, err = sjson.Set(body, field, replaceValue)
-					if err != nil {
-						return 0
-					}
-				}
+			var action types.Action
+			var done bool
+			body, action, done = r.customDesensitize(custom, json, body, err)
+			if done {
+				return action
 			}
 		}
 	}
@@ -163,131 +148,19 @@ func (r *responseContext) OnHttpResponseBody(bodySize int, endOfStream bool) typ
 	return types.ActionContinue
 }
 
-// Pre、Suf、Con
-func maskOperator(str, rule string) string {
-	rules := strings.Split(rule, "_")
-
-	var bt bytes.Buffer
-	if rules[0] == "Pre" {
-		index, err := strconv.Atoi(rules[1])
-		if err != nil {
-			proxywasm.LogErrorf("failed to mask data: %v", err)
-			return ""
-		}
-		for i := 0; i < index; i++ {
-			bt.WriteString("*")
-		}
-		bt.WriteString(str[index:])
-	}
-
-	if rules[0] == "Suf" {
-		index, err := strconv.Atoi(rules[1])
-		if err != nil {
-			proxywasm.LogErrorf("failed to mask data: %v", err)
-			return ""
-		}
-		i := len(str) - index
-		bt.WriteString(str[:i])
-		for i := len(str) - index; i < len(str); i++ {
-			bt.WriteString("*")
+func (r *responseContext) customDesensitize(custom string, json gjson.Result, body string, err error) (string, types.Action, bool) {
+	customRule := strings.Split(custom, "==")
+	field := customRule[0]
+	desensitizeType := strings.Split(customRule[1], "#")[0]
+	rule := strings.Split(customRule[1], "#")[1]
+	if json.Get(field).Exists() {
+		if desensitizeType == "Mask" {
+			replaceValue := maskOperator(json.Get(field).String(), rule)
+			body, err = sjson.Set(body, field, replaceValue)
+			if err != nil {
+				return "", 0, true
+			}
 		}
 	}
-
-	if rules[0] == "Con" {
-		ruleIndex := strings.Split(rules[1], "-")
-		indexLeft, err := strconv.Atoi(ruleIndex[0])
-		if err != nil {
-			proxywasm.LogErrorf("failed to mask data: %v", err)
-			return ""
-		}
-		indexRight, err := strconv.Atoi(ruleIndex[1])
-		if err != nil {
-			proxywasm.LogErrorf("failed to mask data: %v", err)
-			return ""
-		}
-		bt.WriteString(str[:indexLeft-1])
-		for i := indexLeft; i <= indexRight; i++ {
-			bt.WriteString("*")
-		}
-		bt.WriteString(str[indexRight:])
-	}
-
-	return bt.String()
-}
-
-func validateCustomRule(rule string) bool {
-	if !strings.Contains(rule, "==") || !strings.Contains(rule, "#") || !strings.Contains(rule, "_") {
-		proxywasm.LogErrorf("customs rule is not a valid format: %s", rule)
-		return false
-	}
-	return true
-}
-
-func isContain(items []string, item string) bool {
-	for _, eachItem := range items {
-		if eachItem == item {
-			return true
-		}
-	}
-	return false
-}
-
-func validatePayload(body []byte) bool {
-	if !gjson.ValidBytes(body) {
-		proxywasm.LogErrorf("body is not a valid json: %q", string(body))
-		return false
-	}
-	return true
-}
-
-func postCodeDesensitize(body string) string {
-	postCodePat := "^[0-9]\\d{5}$"
-	replacePat := "(\\d{2})(\\d{2})(\\d{2})"
-	postCodeRegex := regexp.MustCompile(postCodePat)
-	replaceRegex := regexp.MustCompile(replacePat)
-	for {
-		subMatch := postCodeRegex.FindStringSubmatch(body)
-		if len(subMatch) != 0 {
-			allString := replaceRegex.ReplaceAllString(subMatch[0], "**$2$3")
-			body = strings.ReplaceAll(body, subMatch[0], allString)
-		} else {
-			break
-		}
-	}
-	return body
-}
-
-func IdCardDesensitize(body string) string {
-	idCardPat := "(([1-6]\\d{5})(19\\d{2}|20\\d{2})(0[1-9]|1[012])(0[1-9]|[12]\\d|3[01])(\\d{3}[\\dxX]))"
-	replacePat := "(\\d{6})(\\d{8})(\\w{4})"
-	idCardRegex := regexp.MustCompile(idCardPat)
-	replaceRegex := regexp.MustCompile(replacePat)
-	for {
-		subMatch := idCardRegex.FindStringSubmatch(body)
-		if len(subMatch) != 0 {
-			allString := replaceRegex.ReplaceAllString(subMatch[0], "$1********$3")
-			body = strings.ReplaceAll(body, subMatch[0], allString)
-		} else {
-			break
-		}
-	}
-	return body
-}
-
-func PhoneNumberDesensitize(body string) string {
-	phonePat := ".*([^0-9]{1})(13|14|15|17|18|19)(\\d{9})([^0-9]{1}).*"
-	replacePat := ".*(\\d{3})(\\d{4})(\\d{4}).*"
-	phoneRegex := regexp.MustCompile(phonePat)
-	replaceRegex := regexp.MustCompile(replacePat)
-	for {
-		subMatch := phoneRegex.FindStringSubmatch(body)
-		if len(subMatch) != 0 {
-			phoneNumber := subMatch[2] + subMatch[3]
-			allString := replaceRegex.ReplaceAllString(phoneNumber, "$1****$3")
-			body = strings.ReplaceAll(body, phoneNumber, allString)
-		} else {
-			break
-		}
-	}
-	return body
+	return body, 0, false
 }

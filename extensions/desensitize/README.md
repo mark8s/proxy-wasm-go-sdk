@@ -49,6 +49,10 @@ data.receiverPostCode==Mask#Con_2-4
 ```shell
 tinygo build -o desensitize.wasm -scheduler=none -target=wasi main.go
 ```
+如果`main.go`文件里面调用了同级目录(同一个package不同文件)的函数，则使用以下命令构建
+```shell
+tinygo build -o desensitize.wasm -scheduler=none -target=wasi .
+```
 
 ## 调试
 修改 istio-proxy日志级别，调试wasm的时候很有用。
