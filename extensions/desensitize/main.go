@@ -158,7 +158,7 @@ func (r *responseContext) customDesensitize(custom string, json gjson.Result, bo
 		}
 		operator := strings.Split(desensitize, "#")[0]
 		rule := strings.Split(desensitize, "#")[1]
-		var replaceValue string
+		var replaceValue interface{}
 
 		switch operator {
 		case "Mask":
@@ -166,11 +166,11 @@ func (r *responseContext) customDesensitize(custom string, json gjson.Result, bo
 		case "Hash":
 			replaceValue = hash(json.Get(field).String())
 		case "Shift":
-			replaceValue = shift(json.Get(field).String(), rule)
+			replaceValue = shift(json.Get(field), rule)
 		case "Enumeration":
-			replaceValue = enumeration(json.Get(field).String())
+			replaceValue = enumeration(json.Get(field))
 		case "Truncation":
-			replaceValue = truncation(json.Get(field).String(), rule)
+			replaceValue = truncation(json.Get(field), rule)
 		}
 
 		body, err = sjson.Set(body, field, replaceValue)
