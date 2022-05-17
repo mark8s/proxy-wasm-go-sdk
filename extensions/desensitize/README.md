@@ -6,10 +6,11 @@ Desensitize也即数据脱敏。数据脱敏也叫数据的去隐私化，在我
 
 `desensitize`是一个数据脱敏的`wasm` extensions，支持n种类型数据的脱敏，例如：邮箱地址、手机号、身份证、银行卡、车牌号、姓名、家庭地址、ip地址、生日、密码等。
 
-目前支持的脱敏类型为Mask，未来会支持如Hiding、Hashing、Shift、Truncation等。
+目前支持的脱敏类型为Mask、Hash、Shift、Enumeration、Truncation等。
 
 ## 脱敏类型
 如下图：
+
 ![数据脱敏](../../doc/images/desensitize-type.png)
 
 ## 配置脱敏
@@ -21,7 +22,7 @@ Desensitize也即数据脱敏。数据脱敏也叫数据的去隐私化，在我
                 value: |
                   {
                     "globals": ["PhoneNumber","IdCard"],
-                    "customs": ["data.receiverPostCode","data.orderSn==Hash","data.receiverCity==Mask#Pre_9"]
+                    "customs": ["data.receiverPostCode","data.orderSn==Hash","data.receiverCity==Mask#Pre_9","data.receiverPhone==Mask#Con_4-9","data.orderItemList.#[id=21].productPrice","data.totalAmount==Shift#2","data.freightAmount==Enumeration","data.payAmount==Truncation#3"]
                   }
               vm_config:
                 code:
@@ -37,9 +38,12 @@ Desensitize也即数据脱敏。数据脱敏也叫数据的去隐私化，在我
 
 `customs`: 针对指定字段进行脱敏，配置的格式为：fieldPath==脱敏类型#配置规则(规则类型_索引)
 
-目前支持Mask、Hash脱敏类型。配置规则可设置的值为Pre、Suf和Con，分别代表 前缀、后缀和连续，索引是规则应用的起点或终点。
+配置规则可设置的值为Pre、Suf和Con，分别代表 前缀、后缀和连续，索引是规则应用的起点或终点。
 
-如针对`data.receiverPostCode`字段值的第2位到第4位进行数据加密，则表达式的写法为：
+
+### 示例
+#### Mask
+如针对`data.receiverPostCode`字段值的第2位到第4位进行mask，则表达式的写法为：
 
 ```shell
 data.receiverPostCode==Mask#Con_2-4
@@ -49,6 +53,35 @@ data.receiverPostCode==Mask#Con_2-4
 data.receiverPostCode
 ``` 
 它等同于`data.receiverPostCode==Mask#Pre_2`
+
+#### Hash
+Hash 只支持整体hash。也就是不支持Pre，不支持Suf、Con。
+如对`orderSn`字段值进行整体的hash，则表达式的写法为: 
+```shell
+data.orderSn==Hash
+```
+#### Shift
+Shift 只支持Pre，不支持Suf、Con。
+如对 orderItemList中id为21的数据的productPrice字段值进行数据偏移，则表达式的写法为：
+```shell
+data.orderItemList.#[id=21].productPrice==Shift#2
+```
+
+#### Enumeration
+Hash 只支持整体Enumeration。也就是不支持Pre，不支持Suf、Con。
+如对orderItemList中id为21的数据的productPrice字段值进行Enumeration，则表达式的写法为:
+```shell
+data.orderItemList.#[id=21].productPrice==Enumeration
+```
+
+#### Truncation
+Truncation 只支持后多少位数。也就是只支持Pre，不支持Suf、Con。
+
+如对`data.telephone`字段值进行后9位的truncation，则表达式的写法为：
+```shell
+data.receiverPostCode==Truncation#9
+```
+
 
 ## 构建
 ```shell
@@ -67,7 +100,7 @@ istioctl -n mall proxy-config log mall-admin-5498f4fb79-svt7l --level trace
 
 查看日志
 ```shell
- kubectl logs -f mall-admin-5498f4fb79-svt7l -n mall -c istio-proxy  | grep "wasm log clean-mall-admin"
+kubectl logs -f mall-admin-5498f4fb79-svt7l -n mall -c istio-proxy  | grep "wasm log clean-mall-admin"
 ```
 
 

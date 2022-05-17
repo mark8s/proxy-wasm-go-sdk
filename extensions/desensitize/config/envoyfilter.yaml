@@ -40,8 +40,8 @@ spec:
                 '@type': type.googleapis.com/google.protobuf.StringValue
                 value: |
                  {
-                    "globals": ["PhoneNumber","IdCard"],
-                    "customs": ["data.receiverPostCode==Mask#Pre_2"]
+                   "globals": ["PhoneNumber","IdCard"],
+                   "customs": ["data.receiverPostCode","data.orderSn==Hash","data.receiverCity==Mask#Pre_3","data.orderItemList.#[id=21].productPrice"]
                  }
               vm_config:
                 code:
