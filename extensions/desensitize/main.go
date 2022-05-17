@@ -165,6 +165,12 @@ func (r *responseContext) customDesensitize(custom string, json gjson.Result, bo
 			replaceValue = mask(json.Get(field).String(), rule)
 		case "Hash":
 			replaceValue = hash(json.Get(field).String())
+		case "Shift":
+			replaceValue = shift(json.Get(field).String(), rule)
+		case "Enumeration":
+			replaceValue = enumeration(json.Get(field).String())
+		case "Truncation":
+			replaceValue = truncation(json.Get(field).String(), rule)
 		}
 
 		body, err = sjson.Set(body, field, replaceValue)
