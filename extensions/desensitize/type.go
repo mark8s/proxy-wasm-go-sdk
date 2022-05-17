@@ -5,12 +5,13 @@ import (
 	"crypto/md5"
 	"fmt"
 	"github.com/tetratelabs/proxy-wasm-go-sdk/proxywasm"
+	. "github.com/tidwall/gjson"
 	"strconv"
 	"strings"
 	"time"
 )
 
-func truncation(str, rule string) string {
+func truncation(str Result, rule string) interface{} {
 	var offset int
 	var err error
 	if !strings.Contains(rule, "_") {
@@ -26,23 +27,56 @@ func truncation(str, rule string) string {
 			return ""
 		}
 	}
-
 	var bt bytes.Buffer
-	index := len(str) - offset
-	bt.WriteString(str[:index])
-	return bt.String()
-}
+	index := len(str.String()) - offset
+	bt.WriteString(str.String()[:index])
 
-func enumeration(str string) string {
-	strInt, err := strconv.Atoi(str)
-	if err != nil {
-		proxywasm.LogErrorf("failed to enumeration data: %v", err)
-		return ""
+	var result interface{}
+	if str.Type == String {
+		result = bt.String()
+	} else if str.Type == Number {
+		if strings.Contains(bt.String(), ".") {
+			result, err = strconv.ParseFloat(bt.String(), 64)
+			if err != nil {
+				proxywasm.LogErrorf("failed to truncation data: %v", err)
+				return ""
+			}
+		} else {
+			result, err = strconv.Atoi(bt.String())
+			if err != nil {
+				proxywasm.LogErrorf("failed to truncation data: %v", err)
+				return ""
+			}
+		}
 	}
-	return strconv.Itoa(time.Now().Day() * strInt)
+	return result
 }
 
-func shift(str, rule string) string {
+func enumeration(str Result) interface{} {
+	var result interface{}
+	if str.Type == String {
+		strInt, err := strconv.Atoi(str.Str)
+		if err != nil {
+			proxywasm.LogErrorf("failed to enumeration data: %v", err)
+			return ""
+		}
+		result = strconv.Itoa(time.Now().Day() * strInt)
+	} else if str.Type == Number {
+		if strings.Contains(str.String(), ".") {
+			float, err := strconv.ParseFloat(str.String(), 64)
+			if err != nil {
+				proxywasm.LogErrorf("failed to enumeration data: %v", err)
+				return nil
+			}
+			return float64(time.Now().Day()) * float
+		} else {
+			return int64(time.Now().Day()) * str.Int()
+		}
+	}
+	return result
+}
+
+func shift(str Result, rule string) interface{} {
 	var offset int
 	var err error
 	if !strings.Contains(rule, "_") {
@@ -63,7 +97,28 @@ func shift(str, rule string) string {
 	for i := 0; i < offset; i++ {
 		bt.WriteString("1")
 	}
-	return bt.String() + str
+
+	var result interface{}
+	if str.Type == String {
+		result = bt.String() + str.String()
+	} else if str.Type == Number {
+		if strings.Contains(str.String(), ".") {
+			c := bt.String() + str.String()
+			strFloat, err := strconv.ParseFloat(c, 64)
+			if err != nil {
+				proxywasm.LogErrorf("failed to shift data: %v", err)
+				return nil
+			}
+			return strFloat
+		} else {
+			result, err = strconv.Atoi(bt.String() + str.String())
+			if err != nil {
+				proxywasm.LogErrorf("failed to shift data: %v", err)
+				return -1
+			}
+		}
+	}
+	return result
 }
 
 func hash(str string) string {
