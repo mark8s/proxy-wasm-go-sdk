@@ -132,9 +132,6 @@ func (r *responseContext) OnHttpResponseBody(bodySize int, endOfStream bool) typ
 	if len(r.customs) != 0 {
 		json := gjson.Parse(body)
 		for _, custom := range r.customs {
-			if !validateCustomRule(custom) {
-				continue
-			}
 			var action types.Action
 			var done bool
 			body, action, done = r.customDesensitize(custom, json, body, err)
@@ -149,17 +146,30 @@ func (r *responseContext) OnHttpResponseBody(bodySize int, endOfStream bool) typ
 }
 
 func (r *responseContext) customDesensitize(custom string, json gjson.Result, body string, err error) (string, types.Action, bool) {
+	if !strings.Contains(custom, "==") {
+		custom += "==Mask"
+	}
 	customRule := strings.Split(custom, "==")
 	field := customRule[0]
-	desensitizeType := strings.Split(customRule[1], "#")[0]
-	rule := strings.Split(customRule[1], "#")[1]
+	desensitize := customRule[1]
 	if json.Get(field).Exists() {
-		if desensitizeType == "Mask" {
-			replaceValue := maskOperator(json.Get(field).String(), rule)
-			body, err = sjson.Set(body, field, replaceValue)
-			if err != nil {
-				return "", 0, true
-			}
+		if !strings.Contains(desensitize, "#") {
+			desensitize += "#Pre_2"
+		}
+		operator := strings.Split(desensitize, "#")[0]
+		rule := strings.Split(desensitize, "#")[1]
+		var replaceValue string
+
+		switch operator {
+		case "Mask":
+			replaceValue = mask(json.Get(field).String(), rule)
+		case "Hash":
+			replaceValue = hash(json.Get(field).String())
+		}
+
+		body, err = sjson.Set(body, field, replaceValue)
+		if err != nil {
+			return "", 0, true
 		}
 	}
 	return body, 0, false

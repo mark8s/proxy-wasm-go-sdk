@@ -2,13 +2,20 @@ package main
 
 import (
 	"bytes"
+	"crypto/md5"
+	"fmt"
 	"github.com/tetratelabs/proxy-wasm-go-sdk/proxywasm"
 	"strconv"
 	"strings"
 )
 
+func hash(str string) string {
+	s := fmt.Sprintf("%x", md5.Sum([]byte(str)))
+	return s
+}
+
 // Pre、Suf、Con
-func maskOperator(str, rule string) string {
+func mask(str, rule string) string {
 	rules := strings.Split(rule, "_")
 
 	var bt bytes.Buffer
