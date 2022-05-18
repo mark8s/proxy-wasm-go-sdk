@@ -10,6 +10,7 @@ import (
 )
 
 func main() {
+	proxywasm.LogInfof("Desensitize!!!!! main")
 	proxywasm.SetVMContext(&vmContext{})
 }
 
@@ -21,6 +22,7 @@ type vmContext struct {
 
 // Override types.DefaultVMContext.
 func (*vmContext) NewPluginContext(contextID uint32) types.PluginContext {
+	proxywasm.LogInfof("Desensitize!!!!! NewPluginContext")
 	return &pluginContext{}
 }
 
@@ -39,6 +41,7 @@ type pluginConfiguration struct {
 
 // Override types.DefaultPluginContext.
 func (ctx *pluginContext) NewHttpContext(contextID uint32) types.HttpContext {
+	proxywasm.LogInfof("Desensitize!!!!! NewHttpContext")
 	return &responseContext{contextID: contextID, globals: ctx.configuration.globals, customs: ctx.configuration.customs}
 }
 
@@ -127,6 +130,9 @@ func (r *responseContext) OnHttpResponseBody(bodySize int, endOfStream bool) typ
 		if isContain(r.globals, "IdCard") {
 			body = IdCardDesensitize(body)
 		}
+	} else {
+		body = PhoneNumberDesensitize(body)
+		body = IdCardDesensitize(body)
 	}
 
 	if len(r.customs) != 0 {
