@@ -103,5 +103,26 @@ istioctl -n mall proxy-config log mall-admin-5498f4fb79-svt7l --level trace
 kubectl logs -f mall-admin-5498f4fb79-svt7l -n mall -c istio-proxy  | grep "wasm log clean-mall-admin"
 ```
 
+## 问题
+当前`tinygo`写的wasm 仅支持在`istio-1.13.0`版本运行成功，当我在`istio 1.9~1.12`运行的时候都报了以下的错误。
+
+因为`tinygo`写的wasm 需要的envoy的版本需要v1.21.0以上。 
+
+这就很操了，如果要想在`istio`中使用wasm估计真的只能使用C++开发了。
+
+错误如下：
+```shell
+2022-05-18T10:18:03.768273Z	error	envoy wasm	Failed to load Wasm module due to a missing import: wasi_snapshot_preview1.fd_prestat_get
+2022-05-18T10:18:03.768293Z	error	envoy wasm	Failed to load Wasm module due to a missing import: wasi_snapshot_preview1.fd_prestat_dir_name
+2022-05-18T10:18:03.768296Z	error	envoy wasm	Failed to load Wasm module due to a missing import: wasi_snapshot_preview1.path_open
+2022-05-18T10:18:03.768301Z	error	envoy wasm	Wasm VM failed Failed to initialize Wasm code
+2022-05-18T10:18:03.769115Z	critical	envoy wasm	Plugin configured to fail closed failed to load
+```
+与该问题相关的issue: [Fail to load wasm filter built by tinygo](https://github.com/envoyproxy/envoy/issues/20483)
+
+
+
+
+
 
 
