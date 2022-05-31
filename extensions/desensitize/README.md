@@ -103,6 +103,18 @@ istioctl -n mall proxy-config log mall-admin-5498f4fb79-svt7l --level trace
 kubectl logs -f mall-admin-5498f4fb79-svt7l -n mall -c istio-proxy  | grep "wasm log clean-mall-admin"
 ```
 
+查看istio使用的envoy版本
+```shell
+$ yum install -y jq
+$ kubectl exec -it mall-admin-cb648c896-4lrqp -c istio-proxy -n mall  -- pilot-agent request GET server_info --log_as_json | jq {version}
+$ 
+{
+   "version": "7c2723f66c97d50eddeae8502eed8f0f10940d43/1.21.0/Clean/RELEASE/BoringSSL"
+}
+```
+原文: [What Envoy version is Istio using?](https://istio.io/latest/docs/ops/diagnostic-tools/proxy-cmd/#what-envoy-version-is-istio-using)
+
+
 ## 问题
 当前`tinygo`写的wasm 仅支持在`istio-1.13.0`版本运行成功，当我在`istio 1.9~1.12`运行的时候都报了以下的错误。
 
